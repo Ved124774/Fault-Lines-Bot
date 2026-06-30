@@ -1,8 +1,9 @@
 """
 scraper.py
 ----------
-Fetches articles from a broad set of RSS feeds, then uses Gemini to judge
-relevance rather than relying on a fixed keyword list.
+Fetches articles from a broad set of RSS feeds. Relevance filtering for the
+newsletter happens here; the Bluesky bot does its own lightweight filtering
+inline to minimize Gemini calls.
 """
 
 import requests
@@ -38,7 +39,7 @@ RSS_FEEDS = [
 ]
 
 
-def call_gemini_with_retry(prompt, max_retries=5):
+def call_gemini_with_retry(prompt, max_retries=8, wait_time=90):
     """Call Gemini and automatically wait/retry if we hit a rate limit."""
     for attempt in range(max_retries):
         try:
@@ -46,7 +47,6 @@ def call_gemini_with_retry(prompt, max_retries=5):
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():
-                wait_time = 60
                 print(f"  Rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})...")
                 time.sleep(wait_time)
             else:
@@ -74,16 +74,6 @@ def scrape_raw_articles(max_per_feed: int = 3):
                     })
         except Exception as e:
             print(f"  Feed error ({feed_url}): {e}")
-    return articles
-
-
-def filter_relevant_articles(articles, max_relevant: int = 20):
-    """
-    Send article titles and summaries to Gemini and ask it to judge
-    relevance to tech geopolitics, with no fixed keyword list.
-    """
-    if not articles:
-        return []
 
     seen = set()
     unique = []
@@ -92,9 +82,21 @@ def filter_relevant_articles(articles, max_relevant: int = 20):
             seen.add(a["title"])
             unique.append(a)
 
+    return unique
+
+
+def filter_relevant_articles(articles, max_relevant: int = 20):
+    """
+    Send article titles and summaries to Gemini and ask it to judge
+    relevance to the geopolitics of business, with no fixed keyword list.
+    Used by the newsletter bot, which only runs twice a week.
+    """
+    if not articles:
+        return []
+
     numbered = "\n".join(
         f"{i+1}. [{a['source']}] {a['title']} — {a['summary'][:100]}"
-        for i, a in enumerate(unique)
+        for i, a in enumerate(articles)
     )
 
     prompt = f"""You are the editorial filter for Fault Lines, a newsletter about the geopolitics of business.
@@ -119,17 +121,17 @@ Return ONLY a JSON array of the numbers of relevant articles, e.g. [1, 3, 7, 12]
         response = call_gemini_with_retry(prompt)
         text = response.text.strip().strip("```json").strip("```").strip()
         indices = json.loads(text)
-        relevant = [unique[i - 1] for i in indices if 1 <= i <= len(unique)]
+        relevant = [articles[i - 1] for i in indices if 1 <= i <= len(articles)]
         return relevant[:max_relevant]
     except Exception as e:
         print(f"  Gemini filter error: {e}")
-        return unique[:max_relevant]
+        return articles[:max_relevant]
 
 
 def get_articles(max_relevant: int = 20):
-    """Full pipeline: scrape, then filter for relevance."""
+    """Full pipeline for the newsletter: scrape, then filter for relevance."""
     print("  Scraping RSS feeds...")
-    raw = scrape_raw_articles()
+    raw = scrape_raw_articles(max_per_feed=4)
     print(f"  Got {len(raw)} raw articles")
 
     print("  Filtering for relevance with Gemini...")
