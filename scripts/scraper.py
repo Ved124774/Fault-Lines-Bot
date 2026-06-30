@@ -15,7 +15,7 @@ import json
 import time
 
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 RSS_FEEDS = [
     "https://foreignpolicy.com/feed/",
@@ -39,7 +39,7 @@ RSS_FEEDS = [
 ]
 
 
-def call_gemini_with_retry(prompt, max_retries=8, wait_time=90):
+def call_gemini_with_retry(prompt, max_retries=3, wait_time=60):
     """Call Gemini and automatically wait/retry if we hit a rate limit."""
     for attempt in range(max_retries):
         try:
