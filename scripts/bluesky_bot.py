@@ -10,7 +10,6 @@ Daily Bluesky activity for Fault Lines:
 """
 
 import os
-import json
 import time
 import google.generativeai as genai
 
@@ -20,7 +19,7 @@ from bluesky_client import BlueskyClient
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 VOICE_GUIDE = """
 VOICE RULES:
@@ -82,7 +81,7 @@ Return ONLY the reply text, nothing else."""
     return text[:300]
 
 
-def pick_best_post_to_reply_to(posts: list) -> dict | None:
+def pick_best_post_to_reply_to(posts: list):
     """Use Gemini to pick the single most interesting, substantive post to engage with."""
     if not posts:
         return None
@@ -111,7 +110,6 @@ Return ONLY the number of your choice, nothing else."""
     except Exception as e:
         print(f"  Pick post error: {e}")
 
-    # Fallback: pick the longest post as a proxy for substance
     return max(posts, key=lambda p: len(p.get("record", {}).get("text", "")))
 
 
@@ -126,7 +124,7 @@ def run_bluesky():
     print("Loading 30-day memory...")
     memory = get_all_memory()
 
-    # ── 1. Post original content ────────────────────────────────────────────
+    # 1. Post original content
     print("Scraping news for today's post...")
     articles = get_articles(max_relevant=15)
 
@@ -139,7 +137,7 @@ def run_bluesky():
 
     time.sleep(3)
 
-    # ── 2. Reply to one good post in the wild ───────────────────────────────
+    # 2. Reply to one good post in the wild
     print("Searching Bluesky for posts to engage with...")
     trending = client.get_trending_posts(limit=20)
     print(f"Found {len(trending)} candidate posts")
@@ -162,7 +160,7 @@ def run_bluesky():
 
     time.sleep(3)
 
-    # ── 3. Follow a few relevant accounts ───────────────────────────────────
+    # 3. Follow a few relevant accounts
     print("Looking for accounts to follow...")
     followed_count = client.find_and_follow_relevant_accounts(trending, max_follows=5)
     print(f"Followed {followed_count} new accounts")
