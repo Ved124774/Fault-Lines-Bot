@@ -13,7 +13,7 @@ import os
 import json
 
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 RSS_FEEDS = [
     "https://foreignpolicy.com/feed/",
@@ -80,14 +80,14 @@ def filter_relevant_articles(articles, max_relevant: int = 20):
         for i, a in enumerate(unique)
     )
 
-    prompt = f"""You are the editorial filter for Fault Lines, a newsletter about the geopolitics of business and technology.
+    prompt = f"""You are the editorial filter for Fault Lines, a newsletter about the geopolitics of business.
 
 Decide which of these articles are genuinely relevant to that beat. Relevant topics include, but are not
 limited to: semiconductors and chip manufacturing, undersea cables and satellite infrastructure, rare earths
 and critical minerals, AI policy and compute infrastructure, sanctions and export controls, industrial policy,
 supply chain shifts driven by geopolitics, great power competition over technology and trade, small countries
 or companies with outsized leverage in global supply chains, cybersecurity as a geopolitical tool, and energy
-infrastructure with geopolitical stakes. Use judgment beyond this list too — if something is clearly about how
+infrastructure with geopolitical stakes. Use judgment beyond this list too, if something is clearly about how
 nation-states and business power intersect, include it.
 
 NOT relevant: pure domestic politics with no international business angle, sports, entertainment, celebrity
