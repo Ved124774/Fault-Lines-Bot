@@ -18,16 +18,16 @@ BEEHIIV_API_KEY = os.environ["BEEHIIV_API_KEY"]
 BEEHIIV_PUBLICATION_ID = os.environ["BEEHIIV_PUBLICATION_ID"]
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-pro")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 VOICE_GUIDE = """
-VOICE AND STYLE RULES — follow these strictly:
+VOICE AND STYLE RULES, follow these strictly:
 
 - Write like a sharp, curious friend explaining something fascinating over coffee, not a press release
   and not an academic paper.
 - Plain language. If a term needs jargon, explain it in one clause, don't assume the reader knows it.
 - A hint of dry humour is welcome. Don't force jokes, but a wry observation is good.
-- Be opinionated and specific. Avoid vague hedging like "some experts believe" — say what's actually
+- Be opinionated and specific. Avoid vague hedging like "some experts believe", say what's actually
   going on and why it matters.
 - NEVER use em dashes (—) anywhere in the text. Use commas, periods, or parentheses instead.
 - Vary sentence length. Short punchy sentences mixed with longer explanatory ones. Avoid a robotic,
@@ -35,7 +35,7 @@ VOICE AND STYLE RULES — follow these strictly:
 - No corporate throat-clearing like "In today's rapidly evolving landscape" or "In an increasingly
   interconnected world." Just start with the actual interesting thing.
 - Avoid clichés: "double-edged sword," "elephant in the room," "only time will tell," "game changer."
-- Address the reader sometimes, directly, like "you" - this is a newsletter, not a textbook.
+- Address the reader sometimes, directly, like "you", this is a newsletter, not a textbook.
 - Be curious on the page. Ask a real question sometimes and then answer it.
 - Every section should teach the reader something they didn't know, not just summarise news they've
   half-seen already.
