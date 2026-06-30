@@ -1,25 +1,21 @@
 """
 bluesky_bot.py
 --------------
-Daily Bluesky activity for Fault Lines:
-  1. Write and post one sharp, original take on today's news
-  2. Find a genuinely good post about tech geopolitics and reply with a
-     thoughtful comment
-  3. Follow a small number of accounts that post substantive content on
-     the topic
+Daily Bluesky activity for Fault Lines. Designed to make exactly ONE Gemini
+call per run to stay comfortably within free tier rate limits.
 """
 
 import os
+import json
 import time
 import google.generativeai as genai
 
-from scraper import get_articles, call_gemini_with_retry
+from scraper import scrape_raw_articles, call_gemini_with_retry
 from memory import get_all_memory, format_memory_for_prompt
 from bluesky_client import BlueskyClient
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
 
 VOICE_GUIDE = """
 VOICE RULES:
@@ -33,84 +29,74 @@ VOICE RULES:
 """
 
 
-def generate_daily_post(articles, memory) -> str:
-    past_context = format_memory_for_prompt(memory)
-    news_text = "\n".join(f"• {a['title']}: {a['summary'][:150]}" for a in articles[:8])
-
-    prompt = f"""You write the Bluesky account for Fault Lines, a newsletter about the geopolitics of business.
-
-{VOICE_GUIDE}
-
-{past_context}
-
-Today's news:
-{news_text}
-
-Write ONE Bluesky post, under 280 characters, about the single most interesting story above.
-Pick a genuinely surprising angle, not the obvious headline take. Make it feel like an observation
-a smart person would actually post, not a summary.
-
-Return ONLY the post text, nothing else. No quotation marks around it."""
-
-    response = call_gemini_with_retry(prompt)
-    text = response.text.strip().strip('"')
-    return text[:300]
-
-
-def generate_reply(post_text: str, author_handle: str, memory) -> str:
-    past_context = format_memory_for_prompt(memory)
-
-    prompt = f"""You write the Bluesky account for Fault Lines, a newsletter about the geopolitics of business.
-
-{VOICE_GUIDE}
-
-{past_context}
-
-You're replying to this post by @{author_handle}:
-"{post_text}"
-
-Write a thoughtful, substantive reply, under 280 characters. Add something genuinely useful: a fact
-they might not know, a different angle, a sharp question, or a connection to something else going on.
-Don't just agree or compliment them. Don't be combative either. Be the kind of reply that makes someone
-go check out your profile.
-
-Return ONLY the reply text, nothing else."""
-
-    response = call_gemini_with_retry(prompt)
-    text = response.text.strip().strip('"')
-    return text[:300]
-
-
-def pick_best_post_to_reply_to(posts: list):
-    """Use Gemini to pick the single most interesting, substantive post to engage with."""
+def pick_post_to_reply_to(posts: list):
+    """Pick the most substantive post by length, no Gemini call needed."""
     if not posts:
         return None
+    candidates = [p for p in posts if len(p.get("record", {}).get("text", "")) > 100]
+    if not candidates:
+        candidates = posts
+    return max(candidates, key=lambda p: len(p.get("record", {}).get("text", "")))
 
-    numbered = "\n".join(
-        f"{i+1}. @{p.get('author', {}).get('handle', '?')}: "
-        f"{p.get('record', {}).get('text', '')[:150]}"
-        for i, p in enumerate(posts)
+
+def generate_everything_in_one_call(articles, memory, reply_target_text, reply_target_handle):
+    """
+    Single Gemini call that does two jobs at once:
+      1. Picks the most interesting article and writes an original post about it
+      2. Writes a thoughtful reply to a specific trending post
+    Returns a dict with 'post' and 'reply' keys.
+    """
+    past_context = format_memory_for_prompt(memory)
+    news_text = "\n".join(
+        f"{i+1}. {a['title']}: {a['summary'][:150]}" for i, a in enumerate(articles[:15])
     )
 
-    prompt = f"""Here are recent Bluesky posts about tech geopolitics:
+    reply_section = ""
+    if reply_target_text:
+        reply_section = f"""
+SEPARATELY, here is a post by @{reply_target_handle} that you'll also reply to:
+"{reply_target_text}"
+"""
 
-{numbered}
+    prompt = f"""You write the Bluesky account for Fault Lines, a newsletter about the geopolitics of business.
 
-Pick the ONE post that is most substantive, specific, and worth a thoughtful reply from an expert
-account. Avoid posts that are just links with no commentary, or posts that are too short to engage
-with meaningfully.
+{VOICE_GUIDE}
 
-Return ONLY the number of your choice, nothing else."""
+{past_context}
+
+Here is a numbered list of today's news headlines. Some may not be relevant to tech geopolitics,
+business, trade, supply chains, or great power competition, ignore those:
+
+{news_text}
+{reply_section}
+
+Do two things:
+
+1. Pick the single most interesting, relevant story from the list above and write ONE original
+   Bluesky post about it, under 280 characters. Pick a surprising angle, not the obvious headline.
+
+2. {"Write a thoughtful, substantive reply to the post quoted above, under 280 characters. Add something genuinely useful, a fact, a different angle, or a sharp question. Don't just agree or compliment." if reply_target_text else "Skip this, return an empty string."}
+
+Return ONLY valid JSON in this exact format, nothing else, no markdown:
+{{"post": "your original post text here", "reply": "your reply text here or empty string"}}"""
+
+    response = call_gemini_with_retry(prompt)
+    text = response.text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
 
     try:
-        response = call_gemini_with_retry(prompt)
-        index = int(response.text.strip())
-        if 1 <= index <= len(posts):
-            return posts[index - 1]
+        data = json.loads(text)
+        return {
+            "post": data.get("post", "")[:300],
+            "reply": data.get("reply", "")[:300],
+        }
     except Exception as e:
-        print(f"  Pick post error: {e}")
-
-    return max(posts, key=lambda p: len(p.get("record", {}).get("text", "")))
+        print(f"  JSON parse error: {e}, raw: {text[:200]}")
+        return {"post": "", "reply": ""}
 
 
 def run_bluesky():
@@ -124,43 +110,44 @@ def run_bluesky():
     print("Loading 30-day memory...")
     memory = get_all_memory()
 
-    # 1. Post original content
-    print("Scraping news for today's post...")
-    articles = get_articles(max_relevant=15)
+    print("Scraping news (no Gemini call yet)...")
+    raw_articles = scrape_raw_articles(max_per_feed=3)
+    print(f"Got {len(raw_articles)} raw articles")
 
-    if articles:
-        post_text = generate_daily_post(articles, memory)
-        print(f"Generated post: {post_text}")
-        client.post(post_text)
-    else:
-        print("No relevant articles found today, skipping original post.")
-
-    time.sleep(20)
-
-    # 2. Reply to one good post in the wild
-    print("Searching Bluesky for posts to engage with...")
+    print("Finding a trending post to potentially reply to...")
     trending = client.get_trending_posts(limit=20)
-    print(f"Found {len(trending)} candidate posts")
+    reply_target = pick_post_to_reply_to(trending)
 
-    best_post = pick_best_post_to_reply_to(trending)
-    if best_post:
-        author_handle = best_post.get("author", {}).get("handle", "unknown")
-        post_text = best_post.get("record", {}).get("text", "")
-        post_uri = best_post.get("uri")
-        post_cid = best_post.get("cid")
+    reply_target_text = ""
+    reply_target_handle = ""
+    if reply_target:
+        reply_target_text = reply_target.get("record", {}).get("text", "")
+        reply_target_handle = reply_target.get("author", {}).get("handle", "")
 
-        if post_uri and post_cid:
-            reply_text = generate_reply(post_text, author_handle, memory)
-            print(f"Replying to @{author_handle}: {reply_text}")
-            client.reply(reply_text, parent_uri=post_uri, parent_cid=post_cid)
-        else:
-            print("Selected post missing uri/cid, skipping reply.")
+    print("Calling Gemini once for both the post and the reply...")
+    result = generate_everything_in_one_call(
+        raw_articles, memory, reply_target_text, reply_target_handle
+    )
+
+    if result["post"]:
+        print(f"Posting: {result['post']}")
+        client.post(result["post"])
     else:
-        print("No suitable post found to reply to.")
+        print("No post generated, skipping.")
 
-    time.sleep(20)
+    time.sleep(5)
 
-    # 3. Follow a few relevant accounts
+    if result["reply"] and reply_target:
+        post_uri = reply_target.get("uri")
+        post_cid = reply_target.get("cid")
+        if post_uri and post_cid:
+            print(f"Replying to @{reply_target_handle}: {result['reply']}")
+            client.reply(result["reply"], parent_uri=post_uri, parent_cid=post_cid)
+    else:
+        print("No reply generated or no target, skipping.")
+
+    time.sleep(5)
+
     print("Looking for accounts to follow...")
     followed_count = client.find_and_follow_relevant_accounts(trending, max_follows=5)
     print(f"Followed {followed_count} new accounts")
