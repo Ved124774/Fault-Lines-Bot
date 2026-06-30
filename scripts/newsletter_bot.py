@@ -10,7 +10,7 @@ import requests
 from datetime import datetime, timezone
 import google.generativeai as genai
 
-from scraper import get_articles
+from scraper import get_articles, call_gemini_with_retry
 from memory import get_all_memory, format_memory_for_prompt
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
@@ -18,7 +18,6 @@ BEEHIIV_API_KEY = os.environ["BEEHIIV_API_KEY"]
 BEEHIIV_PUBLICATION_ID = os.environ["BEEHIIV_PUBLICATION_ID"]
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
 
 VOICE_GUIDE = """
 VOICE AND STYLE RULES, follow these strictly:
@@ -42,12 +41,8 @@ VOICE AND STYLE RULES, follow these strictly:
 """
 
 
-def get_past_issues_text(memory: dict) -> str:
-    return format_memory_for_prompt(memory)
-
-
 def generate_newsletter(articles, memory: dict) -> str:
-    past_context = get_past_issues_text(memory)
+    past_context = format_memory_for_prompt(memory)
     news_text = "\n".join(
         f"• [{a['source']}] {a['title']}: {a['summary']}" for a in articles
     )
@@ -100,7 +95,7 @@ forward it to someone who'd appreciate it.</p>
 Write only the HTML, nothing else. No markdown formatting, no preamble, no explanation of what you did.
 Make every sentence earn its place."""
 
-    response = model.generate_content(prompt)
+    response = call_gemini_with_retry(prompt)
     return response.text.strip().strip("```html").strip("```").strip()
 
 
