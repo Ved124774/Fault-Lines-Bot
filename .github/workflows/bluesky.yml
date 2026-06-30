@@ -1,0 +1,32 @@
+name: Bluesky Bot
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+    - cron: '0 13 * * *'
+    - cron: '0 18 * * *'
+
+  workflow_dispatch:
+
+jobs:
+  bluesky-post:
+    name: Bluesky Daily Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Bluesky bot
+        working-directory: scripts
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+        run: python bluesky_bot.py
