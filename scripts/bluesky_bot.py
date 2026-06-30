@@ -135,7 +135,7 @@ def run_bluesky():
     else:
         print("No relevant articles found today, skipping original post.")
 
-    time.sleep(3)
+    time.sleep(20)
 
     # 2. Reply to one good post in the wild
     print("Searching Bluesky for posts to engage with...")
@@ -158,7 +158,7 @@ def run_bluesky():
     else:
         print("No suitable post found to reply to.")
 
-    time.sleep(3)
+    time.sleep(20)
 
     # 3. Follow a few relevant accounts
     print("Looking for accounts to follow...")
