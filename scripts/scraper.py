@@ -37,7 +37,7 @@ RSS_FEEDS = [
 ]
 
 
-def scrape_raw_articles(max_per_feed: int = 8):
+def scrape_raw_articles(max_per_feed: int = 4):
     """Pull articles from all RSS feeds."""
     articles = []
     for feed_url in RSS_FEEDS:
