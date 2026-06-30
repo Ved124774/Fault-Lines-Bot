@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 import os
 import json
+import time
 
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.0-flash")
@@ -37,7 +38,23 @@ RSS_FEEDS = [
 ]
 
 
-def scrape_raw_articles(max_per_feed: int = 4):
+def call_gemini_with_retry(prompt, max_retries=5):
+    """Call Gemini and automatically wait/retry if we hit a rate limit."""
+    for attempt in range(max_retries):
+        try:
+            return model.generate_content(prompt)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "quota" in error_str.lower():
+                wait_time = 60
+                print(f"  Rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                time.sleep(wait_time)
+            else:
+                raise
+    raise Exception("Max retries exceeded for Gemini call")
+
+
+def scrape_raw_articles(max_per_feed: int = 3):
     """Pull articles from all RSS feeds."""
     articles = []
     for feed_url in RSS_FEEDS:
@@ -76,7 +93,7 @@ def filter_relevant_articles(articles, max_relevant: int = 20):
             unique.append(a)
 
     numbered = "\n".join(
-        f"{i+1}. [{a['source']}] {a['title']} — {a['summary'][:200]}"
+        f"{i+1}. [{a['source']}] {a['title']} — {a['summary'][:100]}"
         for i, a in enumerate(unique)
     )
 
@@ -99,7 +116,7 @@ Articles:
 Return ONLY a JSON array of the numbers of relevant articles, e.g. [1, 3, 7, 12]. No explanation, no markdown."""
 
     try:
-        response = model.generate_content(prompt)
+        response = call_gemini_with_retry(prompt)
         text = response.text.strip().strip("```json").strip("```").strip()
         indices = json.loads(text)
         relevant = [unique[i - 1] for i in indices if 1 <= i <= len(unique)]
