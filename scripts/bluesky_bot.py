@@ -13,7 +13,7 @@ import os
 import time
 import google.generativeai as genai
 
-from scraper import get_articles
+from scraper import get_articles, call_gemini_with_retry
 from memory import get_all_memory, format_memory_for_prompt
 from bluesky_client import BlueskyClient
 
@@ -35,7 +35,7 @@ VOICE RULES:
 
 def generate_daily_post(articles, memory) -> str:
     past_context = format_memory_for_prompt(memory)
-    news_text = "\n".join(f"• {a['title']}: {a['summary']}" for a in articles[:10])
+    news_text = "\n".join(f"• {a['title']}: {a['summary'][:150]}" for a in articles[:8])
 
     prompt = f"""You write the Bluesky account for Fault Lines, a newsletter about the geopolitics of business.
 
@@ -52,7 +52,7 @@ a smart person would actually post, not a summary.
 
 Return ONLY the post text, nothing else. No quotation marks around it."""
 
-    response = model.generate_content(prompt)
+    response = call_gemini_with_retry(prompt)
     text = response.text.strip().strip('"')
     return text[:300]
 
@@ -76,7 +76,7 @@ go check out your profile.
 
 Return ONLY the reply text, nothing else."""
 
-    response = model.generate_content(prompt)
+    response = call_gemini_with_retry(prompt)
     text = response.text.strip().strip('"')
     return text[:300]
 
@@ -88,7 +88,7 @@ def pick_best_post_to_reply_to(posts: list):
 
     numbered = "\n".join(
         f"{i+1}. @{p.get('author', {}).get('handle', '?')}: "
-        f"{p.get('record', {}).get('text', '')[:200]}"
+        f"{p.get('record', {}).get('text', '')[:150]}"
         for i, p in enumerate(posts)
     )
 
@@ -103,7 +103,7 @@ with meaningfully.
 Return ONLY the number of your choice, nothing else."""
 
     try:
-        response = model.generate_content(prompt)
+        response = call_gemini_with_retry(prompt)
         index = int(response.text.strip())
         if 1 <= index <= len(posts):
             return posts[index - 1]
